@@ -104,7 +104,7 @@ class FDownloader:
         self.password = password
         self.max = _max
 
-    def init_browser(self, headless: Optional[bool] = False) -> None:
+    def init_browser(self, headless: Optional[bool] = False, auth: Optional[bool] = False) -> None:
         """
         Initializing browser and authenticate if necessary
         Lots of obfuscation via: https://intoli.com/blog/making-chrome-headless-undetectable/
@@ -117,6 +117,8 @@ class FDownloader:
         if headless:
             options.add_argument("headless")
         options.add_argument(f"user-agent={USER_AGENT}")
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
 
         self.browser = webdriver.Chrome(
             executable_path=self.driver_path,
@@ -158,7 +160,7 @@ class FDownloader:
 
         self.browser.execute_script(customJs)
 
-        if not headless:
+        if auth:
             self.__auth()
         self.__set_cookies()
         self.browser.set_window_size(*self.default_display)
@@ -250,7 +252,9 @@ class FDownloader:
                         height = self.browser.execute_script(
                             f"return document.getElementsByTagName('canvas')[{n-2}].height"
                         )
-                        self.browser.set_window_size(width, height)
+                        # Canvas height is shorter than the real page height. Add some height as a workaround so it is not cropped
+                        corrected_height = height + 72
+                        self.browser.set_window_size(width, corrected_height)
                     except JavascriptException:
                         print(
                             "\nSome error with JS. Page source are note ready. You can try increase argument -t"
@@ -295,7 +299,7 @@ class FDownloader:
         """
         print(type(page_source))
         soup = bs(page_source, "html.parser")
-        values = soup.find_all('div', class_="table-cell w-full align-top text-left space-y-2 link:text-blue-700 dark:link:text-white")
+        values = soup.find_all('div', class_="table-cell w-full align-top text-left space-y-2 text-default-link")
         pages_info = None
         for val in values:
             try:
@@ -378,21 +382,21 @@ class FDownloader:
             False -- the page num != 1
             True -- this is the first page, we need to wait longer to get good quality
         """
-        if not is_reader_page:
+        if is_reader_page:
             sleep(self.wait)
-            elem_xpath = "//link[@rel='icon']"
-        elif should_add_delay:
-            sleep(self.wait * 3)
+            if should_add_delay:
+                sleep(self.wait * 3)
+            element = EC.frame_to_be_available_and_switch_to_it((By.XPATH, "//iframe[@data-testid='reader']"))
+            WebDriverWait(self.browser, self.timeout).until(element)
             elem_xpath = "//div[@data-name='PageView']"
         else:
             sleep(self.wait)
-            elem_xpath = "//div[@data-name='PageView']"
+            elem_xpath = "//link[@rel='icon']"
         try:
             element = EC.presence_of_element_located((By.XPATH, elem_xpath))
             WebDriverWait(self.browser, self.timeout).until(element)
         except TimeoutException:
             print(
-                "\nError: timed out waiting for page to load. + \
-                You can try increase param -t for more delaying."
+                f"\nError: timed out waiting for page to load. You can try increase param -t for more delaying. Element: {elem_xpath}"
             )
             program_exit()

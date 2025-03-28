@@ -95,6 +95,12 @@ def main():
         help=f"Max number of volumes to download at once \
             Set this argument if you become blocked. By default -- No limit",
     )
+    argparser.add_argument(
+        "-s",
+        "--show",
+        action='store_true',
+        help="Show browser (for debugging purposes)"
+    )
     args = argparser.parse_args()
 
     file_urls = Path(args.file_urls)
@@ -129,10 +135,10 @@ def main():
             f"Cookies file({args.cookies_file}) are not detected. Please, "
             + "login in next step for generate cookie for next runs."
         )
-        loader.init_browser(headless=False)
+        loader.init_browser(headless=False, auth=True)
     else:
         print(f"Using cookies file: {args.cookies_file}")
-        loader.init_browser(headless=True)
+        loader.init_browser(headless=not args.show, auth=False)
 
     if args.collection_url:
         loader.load_urls_from_collection(args.collection_url)
